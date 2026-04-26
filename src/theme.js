@@ -1,18 +1,19 @@
 export const colors = {
-  background: '#F5F7FA',
+  background: '#F7F7F7',
   card: '#FFFFFF',
-  primary: '#1A73E8',
-  danger: '#E53935',
-  warning: '#F4A020',
+  primary: '#2E7D32',       // forest green — logo dot
+  primaryDark: '#1B5E20',   // darker green for pressed states
+  danger: '#C62828',
+  warning: '#E65100',
   success: '#2E7D32',
-  text: '#1C1C1E',
-  subtext: '#6B6B6B',
+  text: '#1A1A1A',          // near-black — logo text
+  subtext: '#5A5A5A',
   border: '#E0E0E0',
   badge: {
-    HYPO: '#E53935',
+    HYPO: '#C62828',
     IN_RANGE: '#2E7D32',
-    HYPER: '#F4A020',
-    FAILSAFE: '#7B1FA2',
+    HYPER: '#E65100',
+    FAILSAFE: '#4A148C',
   },
 };
 

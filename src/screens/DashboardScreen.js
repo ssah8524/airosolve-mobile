@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, RefreshControl,
+  ScrollView, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme';
@@ -40,7 +40,11 @@ export default function DashboardScreen({ navigation }) {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.title}>AiroSolve</Text>
+        <Image
+          source={require('../../assets/logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.subtitle}>Device Status</Text>
 
         {status ? (
@@ -93,10 +97,9 @@ function MetricCard({ label, value, color }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.md },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.text,
+  logo: {
+    width: 200,
+    height: 60,
     marginBottom: spacing.xs,
   },
   subtitle: {
