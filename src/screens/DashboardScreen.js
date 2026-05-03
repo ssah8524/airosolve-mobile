@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, RefreshControl, Image, useWindowDimensions,
+  ScrollView, RefreshControl, Image, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PlethChart from '../components/PlethChart';
@@ -16,8 +16,8 @@ const fetchDeviceStatus = async () => ({
 });
 
 export default function DashboardScreen({ navigation }) {
-  const { width, height }           = useWindowDimensions();
-  const isLandscape                 = width > height;
+  const [dims, setDims]             = useState(Dimensions.get('window'));
+  const isLandscape                 = dims.width > dims.height;
   const [status, setStatus]         = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [chartWidth, setChartWidth] = useState(0);
@@ -28,6 +28,11 @@ export default function DashboardScreen({ navigation }) {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => setDims(window));
+    return () => sub.remove();
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
