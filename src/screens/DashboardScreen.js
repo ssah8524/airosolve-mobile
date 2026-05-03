@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, RefreshControl, Image,
+  ScrollView, RefreshControl, Image, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PlethChart from '../components/PlethChart';
@@ -16,7 +16,9 @@ const fetchDeviceStatus = async () => ({
 });
 
 export default function DashboardScreen({ navigation }) {
-  const [status, setStatus]       = useState(null);
+  const { width, height }           = useWindowDimensions();
+  const isLandscape                 = width > height;
+  const [status, setStatus]         = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [chartWidth, setChartWidth] = useState(0);
 
@@ -39,6 +41,24 @@ export default function DashboardScreen({ navigation }) {
 
   const modeColor = status ? colors.badge[status.mode] ?? colors.primary : colors.subtext;
 
+  // ── Landscape: fullscreen chart only ─────────────────────────────────────
+  if (isLandscape) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <Text style={styles.landscapeHint}>Tap the waveform to report an event</Text>
+        <View
+          style={styles.landscapeChart}
+          onLayout={e => setChartWidth(e.nativeEvent.layout.width)}
+        >
+          {chartWidth > 0 && (
+            <PlethChart width={chartWidth} onChartPress={handleChartPress} landscape />
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Portrait: full dashboard ──────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
@@ -59,7 +79,7 @@ export default function DashboardScreen({ navigation }) {
         )}
 
         <View style={styles.row}>
-          <MetricCard label="SpO₂"   value={status ? `${status.spo2}%`        : '—'} color={colors.success} />
+          <MetricCard label="SpO₂"    value={status ? `${status.spo2}%`        : '—'} color={colors.success} />
           <MetricCard label="O₂ Flow" value={status ? `${status.flow_lpm} LPM` : '—'} color={colors.primary} />
         </View>
         <View style={styles.row}>
@@ -71,8 +91,7 @@ export default function DashboardScreen({ navigation }) {
           <MetricCard label="Updated" value={status?.last_updated ?? '—'} color={colors.subtext} />
         </View>
 
-        {/* Pleth waveform — tap any point to report an event at that time */}
-        <Text style={styles.sectionLabel}>Pleth — tap to report an event</Text>
+        <Text style={styles.sectionLabel}>Pleth — tap to report  ·  rotate for full view</Text>
         <View
           style={styles.chartContainer}
           onLayout={e => setChartWidth(e.nativeEvent.layout.width)}
@@ -82,7 +101,6 @@ export default function DashboardScreen({ navigation }) {
           )}
         </View>
 
-        {/* Fallback manual report button */}
         <TouchableOpacity
           style={styles.reportButton}
           onPress={() => navigation.navigate('ReportEvent', {})}
@@ -156,5 +174,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  reportButtonText: { color: colors.primary, fontSize: 17, fontWeight: '600' },
+  reportButtonText:  { color: colors.primary, fontSize: 17, fontWeight: '600' },
+  landscapeHint: {
+    fontSize: 12,
+    color: colors.subtext,
+    textAlign: 'center',
+    paddingVertical: spacing.xs,
+  },
+  landscapeChart: {
+    flex: 1,
+    backgroundColor: colors.card,
+  },
 });

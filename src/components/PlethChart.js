@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import Svg, { Path, Line, Rect, Circle } from 'react-native-svg';
 import { colors } from '../theme';
 
@@ -21,7 +21,7 @@ function mockSample(t) {
   );
 }
 
-export default function PlethChart({ onChartPress, width }) {
+export default function PlethChart({ onChartPress, width, landscape = false }) {
   const tRef = useRef(BUFFER_SIZE / SAMPLE_RATE);
   const [tapX, setTapX] = useState(null);
 
@@ -57,7 +57,8 @@ export default function PlethChart({ onChartPress, width }) {
     }, TAP_LINE_DURATION);
   }, [samples, width, onChartPress]);
 
-  const H = 160;
+  const { height: screenH } = useWindowDimensions();
+  const H = landscape ? screenH - 40 : 160;
   const pad = 8;
   const w = width - pad * 2;
 
