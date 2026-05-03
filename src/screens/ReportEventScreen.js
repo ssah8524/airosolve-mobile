@@ -8,16 +8,21 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, spacing } from '../theme';
 
 const CATEGORIES = [
-  { id: 'cannula',    label: 'Cannula Issue',       icon: '🔌' },
-  { id: 'patient',   label: 'Patient Issue',        icon: '🧑‍⚕️' },
-  { id: 'experiment',label: 'Experiment Status',    icon: '🧪' },
-  { id: 'device',    label: 'Device Alert',         icon: '⚠️' },
-  { id: 'other',     label: 'Other',                icon: '📝' },
+  { id: 'cannula',      label: 'Cannula Issue',      icon: '🔌' },
+  { id: 'patient',      label: 'Patient Issue',       icon: '🧑‍⚕️' },
+  { id: 'movement',     label: 'Patient Movement',    icon: '🚶' },
+  { id: 'intervention', label: 'Intervention / Drug', icon: '💊' },
+  { id: 'experiment',   label: 'Experiment Status',   icon: '🧪' },
+  { id: 'device',       label: 'Device Alert',        icon: '⚠️' },
+  { id: 'other',        label: 'Other',               icon: '📝' },
 ];
 
 const TIME_MODE = { NOW: 'now', CUSTOM: 'custom' };
 
-export default function ReportEventScreen({ navigation }) {
+export default function ReportEventScreen({ route, navigation }) {
+  const fromChart   = route.params?.fromChart ?? false;
+  const chartTime   = route.params?.timestamp ? new Date(route.params.timestamp) : null;
+
   const [selected, setSelected]     = useState(null);
   const [notes, setNotes]           = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -25,12 +30,18 @@ export default function ReportEventScreen({ navigation }) {
   const [customTime, setCustomTime] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
 
-  const displayTime = timeMode === TIME_MODE.NOW
-    ? 'Now'
-    : customTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const resolvedTime = fromChart
+    ? chartTime
+    : timeMode === TIME_MODE.NOW ? new Date() : customTime;
+
+  const displayTime = fromChart
+    ? chartTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : timeMode === TIME_MODE.NOW
+      ? 'Now'
+      : customTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const onPickerChange = (_event, date) => {
-    setShowPicker(Platform.OS === 'ios'); // keep open on iOS, close on Android
+    setShowPicker(Platform.OS === 'ios');
     if (date) setCustomTime(date);
   };
 
@@ -41,11 +52,11 @@ export default function ReportEventScreen({ navigation }) {
     }
     setSubmitting(true);
 
-    const timestamp = timeMode === TIME_MODE.NOW ? new Date() : customTime;
     const event = {
       category: selected,
       notes: notes.trim(),
-      timestamp: timestamp.toISOString(),
+      timestamp: resolvedTime.toISOString(),
+      source: fromChart ? 'chart_tap' : 'manual',
     };
 
     // TODO: POST to device API when backend is ready
@@ -80,42 +91,51 @@ export default function ReportEventScreen({ navigation }) {
           </TouchableOpacity>
         ))}
 
-        {/* Time */}
+        {/* Time — fixed when coming from chart tap, selectable otherwise */}
         <Text style={styles.subheading}>Event time</Text>
-        <View style={styles.timeModeRow}>
-          <TouchableOpacity
-            style={[styles.timeModeBtn, timeMode === TIME_MODE.NOW && styles.timeModeBtnSelected]}
-            onPress={() => setTimeMode(TIME_MODE.NOW)}
-          >
-            <Text style={[styles.timeModeBtnText, timeMode === TIME_MODE.NOW && styles.timeModeBtnTextSelected]}>
-              Immediate
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.timeModeBtn, timeMode === TIME_MODE.CUSTOM && styles.timeModeBtnSelected]}
-            onPress={() => { setTimeMode(TIME_MODE.CUSTOM); setShowPicker(true); }}
-          >
-            <Text style={[styles.timeModeBtnText, timeMode === TIME_MODE.CUSTOM && styles.timeModeBtnTextSelected]}>
-              Set time
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {timeMode === TIME_MODE.CUSTOM && (
-          <TouchableOpacity style={styles.timeDisplay} onPress={() => setShowPicker(true)}>
+        {fromChart ? (
+          <View style={[styles.timeDisplay, styles.timeDisplayFixed]}>
             <Text style={styles.timeDisplayText}>🕐  {displayTime}</Text>
-            <Text style={styles.timeDisplayEdit}>Edit</Text>
-          </TouchableOpacity>
-        )}
+            <Text style={styles.timeFromChart}>from waveform</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.timeModeRow}>
+              <TouchableOpacity
+                style={[styles.timeModeBtn, timeMode === TIME_MODE.NOW && styles.timeModeBtnSelected]}
+                onPress={() => setTimeMode(TIME_MODE.NOW)}
+              >
+                <Text style={[styles.timeModeBtnText, timeMode === TIME_MODE.NOW && styles.timeModeBtnTextSelected]}>
+                  Immediate
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.timeModeBtn, timeMode === TIME_MODE.CUSTOM && styles.timeModeBtnSelected]}
+                onPress={() => { setTimeMode(TIME_MODE.CUSTOM); setShowPicker(true); }}
+              >
+                <Text style={[styles.timeModeBtnText, timeMode === TIME_MODE.CUSTOM && styles.timeModeBtnTextSelected]}>
+                  Set time
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-        {showPicker && (
-          <DateTimePicker
-            value={customTime}
-            mode="time"
-            is24Hour={false}
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onPickerChange}
-          />
+            {timeMode === TIME_MODE.CUSTOM && (
+              <TouchableOpacity style={styles.timeDisplay} onPress={() => setShowPicker(true)}>
+                <Text style={styles.timeDisplayText}>🕐  {displayTime}</Text>
+                <Text style={styles.timeDisplayEdit}>Edit</Text>
+              </TouchableOpacity>
+            )}
+
+            {showPicker && (
+              <DateTimePicker
+                value={customTime}
+                mode="time"
+                is24Hour={false}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onPickerChange}
+              />
+            )}
+          </>
         )}
 
         {/* Notes */}
@@ -143,14 +163,9 @@ export default function ReportEventScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: spacing.md },
-  heading: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
+  safe:    { flex: 1, backgroundColor: colors.background },
+  scroll:  { padding: spacing.md },
+  heading: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
   subheading: {
     fontSize: 13,
     fontWeight: '600',
@@ -170,18 +185,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
   },
-  categorySelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#E8F5E9',
-  },
-  categoryIcon: { fontSize: 22, marginRight: spacing.sm },
-  categoryLabel: { flex: 1, fontSize: 16, color: colors.text },
+  categorySelected:      { borderColor: colors.primary, backgroundColor: '#E8F5E9' },
+  categoryIcon:          { fontSize: 22, marginRight: spacing.sm },
+  categoryLabel:         { flex: 1, fontSize: 16, color: colors.text },
   categoryLabelSelected: { color: colors.primary, fontWeight: '600' },
-  check: { fontSize: 18, color: colors.primary, fontWeight: '700' },
-  timeModeRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
+  check:                 { fontSize: 18, color: colors.primary, fontWeight: '700' },
+  timeModeRow:           { flexDirection: 'row', gap: spacing.sm },
   timeModeBtn: {
     flex: 1,
     paddingVertical: spacing.sm,
@@ -191,11 +200,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     alignItems: 'center',
   },
-  timeModeBtnSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#E8F5E9',
-  },
-  timeModeBtnText: { fontSize: 15, color: colors.subtext },
+  timeModeBtnSelected:     { borderColor: colors.primary, backgroundColor: '#E8F5E9' },
+  timeModeBtnText:         { fontSize: 15, color: colors.subtext },
   timeModeBtnTextSelected: { color: colors.primary, fontWeight: '600' },
   timeDisplay: {
     flexDirection: 'row',
@@ -208,8 +214,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginTop: spacing.sm,
   },
-  timeDisplayText: { fontSize: 16, color: colors.text },
-  timeDisplayEdit: { fontSize: 14, color: colors.primary, fontWeight: '600' },
+  timeDisplayFixed: { borderColor: colors.border },
+  timeDisplayText:  { fontSize: 16, color: colors.text },
+  timeDisplayEdit:  { fontSize: 14, color: colors.primary, fontWeight: '600' },
+  timeFromChart:    { fontSize: 12, color: colors.subtext },
   textInput: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -221,13 +229,7 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  submitButton: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
+  submitButton:   { marginTop: spacing.xl, backgroundColor: colors.primary, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
   submitDisabled: { opacity: 0.6 },
-  submitText: { color: '#fff', fontSize: 17, fontWeight: '600' },
+  submitText:     { color: '#fff', fontSize: 17, fontWeight: '600' },
 });

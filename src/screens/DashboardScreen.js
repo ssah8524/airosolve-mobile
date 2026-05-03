@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import PlethChart from '../components/PlethChart';
 import { colors, spacing } from '../theme';
 
-// Mock device status — replace with real API call when backend is ready
 const fetchDeviceStatus = async () => ({
   spo2: 94,
   flow_lpm: 2.5,
@@ -16,8 +16,9 @@ const fetchDeviceStatus = async () => ({
 });
 
 export default function DashboardScreen({ navigation }) {
-  const [status, setStatus] = useState(null);
+  const [status, setStatus]       = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [chartWidth, setChartWidth] = useState(0);
 
   const load = async () => {
     const data = await fetchDeviceStatus();
@@ -31,6 +32,10 @@ export default function DashboardScreen({ navigation }) {
     await load();
     setRefreshing(false);
   };
+
+  const handleChartPress = useCallback((timestamp) => {
+    navigation.navigate('ReportEvent', { timestamp: timestamp.toISOString(), fromChart: true });
+  }, [navigation]);
 
   const modeColor = status ? colors.badge[status.mode] ?? colors.primary : colors.subtext;
 
@@ -47,36 +52,40 @@ export default function DashboardScreen({ navigation }) {
         />
         <Text style={styles.subtitle}>Device Status</Text>
 
-        {status ? (
-          <>
-            {/* Mode badge */}
-            <View style={[styles.modeBadge, { backgroundColor: modeColor }]}>
-              <Text style={styles.modeText}>{status.mode.replace('_', ' ')}</Text>
-            </View>
-
-            {/* Vitals cards */}
-            <View style={styles.row}>
-              <MetricCard label="SpO₂" value={`${status.spo2}%`} color={colors.success} />
-              <MetricCard label="O₂ Flow" value={`${status.flow_lpm} LPM`} color={colors.primary} />
-            </View>
-
-            <View style={styles.row}>
-              <MetricCard
-                label="Signal"
-                value={status.signal_quality.toUpperCase()}
-                color={status.signal_quality === 'good' ? colors.success : colors.danger}
-              />
-              <MetricCard label="Updated" value={status.last_updated} color={colors.subtext} />
-            </View>
-          </>
-        ) : (
-          <Text style={styles.loading}>Connecting to device…</Text>
+        {status && (
+          <View style={[styles.modeBadge, { backgroundColor: modeColor }]}>
+            <Text style={styles.modeText}>{status.mode.replace('_', ' ')}</Text>
+          </View>
         )}
 
-        {/* Report button */}
+        <View style={styles.row}>
+          <MetricCard label="SpO₂"   value={status ? `${status.spo2}%`        : '—'} color={colors.success} />
+          <MetricCard label="O₂ Flow" value={status ? `${status.flow_lpm} LPM` : '—'} color={colors.primary} />
+        </View>
+        <View style={styles.row}>
+          <MetricCard
+            label="Signal"
+            value={status ? status.signal_quality.toUpperCase() : '—'}
+            color={status?.signal_quality === 'good' ? colors.success : colors.danger}
+          />
+          <MetricCard label="Updated" value={status?.last_updated ?? '—'} color={colors.subtext} />
+        </View>
+
+        {/* Pleth waveform — tap any point to report an event at that time */}
+        <Text style={styles.sectionLabel}>Pleth — tap to report an event</Text>
+        <View
+          style={styles.chartContainer}
+          onLayout={e => setChartWidth(e.nativeEvent.layout.width)}
+        >
+          {chartWidth > 0 && (
+            <PlethChart width={chartWidth} onChartPress={handleChartPress} />
+          )}
+        </View>
+
+        {/* Fallback manual report button */}
         <TouchableOpacity
           style={styles.reportButton}
-          onPress={() => navigation.navigate('ReportEvent')}
+          onPress={() => navigation.navigate('ReportEvent', {})}
         >
           <Text style={styles.reportButtonText}>+ Report Event</Text>
         </TouchableOpacity>
@@ -95,18 +104,10 @@ function MetricCard({ label, value, color }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: spacing.md },
-  logo: {
-    width: 200,
-    height: 60,
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.subtext,
-    marginBottom: spacing.lg,
-  },
+  safe:     { flex: 1, backgroundColor: colors.background },
+  scroll:   { padding: spacing.md },
+  logo:     { width: 200, height: 60, marginBottom: spacing.xs },
+  subtitle: { fontSize: 14, color: colors.subtext, marginBottom: spacing.md },
   modeBadge: {
     alignSelf: 'flex-start',
     borderRadius: 20,
@@ -114,12 +115,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     marginBottom: spacing.md,
   },
-  modeText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
+  modeText:   { color: '#fff', fontWeight: '600', fontSize: 14 },
+  row:        { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   card: {
     flex: 1,
     backgroundColor: colors.card,
@@ -132,13 +129,32 @@ const styles = StyleSheet.create({
   },
   cardLabel: { fontSize: 12, color: colors.subtext, marginBottom: spacing.xs },
   cardValue: { fontSize: 22, fontWeight: '700' },
-  loading: { color: colors.subtext, marginTop: spacing.xl, textAlign: 'center' },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.subtext,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  chartContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    marginBottom: spacing.md,
+  },
   reportButton: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.primary,
+    marginTop: spacing.sm,
+    backgroundColor: colors.card,
     borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  reportButtonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
+  reportButtonText: { color: colors.primary, fontSize: 17, fontWeight: '600' },
 });
