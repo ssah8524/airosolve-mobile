@@ -122,9 +122,25 @@ export default function DashboardScreen({ navigation, route }) {
 
         {/* Current status */}
         <View style={[styles.statusCard, { borderLeftColor: statusColor }]}>
-          <Text style={styles.statusCardLabel}>Current Status</Text>
-          <Text style={[styles.statusCardValue, { color: statusColor }]}>{currentEvent.label}</Text>
-          <Text style={styles.statusCardTime}>since {statusTime}</Text>
+          <View style={styles.statusCardRow}>
+            <View>
+              <Text style={styles.statusCardLabel}>Current Status</Text>
+              <Text style={[styles.statusCardValue, { color: statusColor }]}>{currentEvent.label}</Text>
+              <Text style={styles.statusCardTime}>since {statusTime}</Text>
+            </View>
+            {currentEvent.category !== 'normal' && (
+              <TouchableOpacity
+                style={styles.resolveButton}
+                onPress={() => setCurrentEvent({
+                  category: 'normal',
+                  label: 'Normal',
+                  timestamp: new Date().toISOString(),
+                })}
+              >
+                <Text style={styles.resolveButtonText}>✓  Mark Resolved</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Pleth chart */}
@@ -197,9 +213,17 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  statusCardRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusCardLabel: { fontSize: 12, color: colors.subtext, marginBottom: spacing.xs },
   statusCardValue: { fontSize: 20, fontWeight: '700' },
   statusCardTime:  { fontSize: 12, color: colors.subtext, marginTop: 2 },
+  resolveButton: {
+    backgroundColor: colors.success,
+    borderRadius: 10,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+  },
+  resolveButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',

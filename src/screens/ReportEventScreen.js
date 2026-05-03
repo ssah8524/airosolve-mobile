@@ -8,7 +8,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, spacing } from '../theme';
 
 const CATEGORIES = [
-  { id: 'normal',       label: 'Back to Normal',      icon: '✅' },
   { id: 'cannula',      label: 'Cannula Issue',        icon: '🔌' },
   { id: 'patient',      label: 'Patient Issue',        icon: '🧑‍⚕️' },
   { id: 'movement',     label: 'Patient Movement',     icon: '🚶' },
