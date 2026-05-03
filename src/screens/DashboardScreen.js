@@ -7,6 +7,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import PlethChart from '../components/PlethChart';
 import { colors, spacing } from '../theme';
 
+const STATUS_COLORS = {
+  normal:       colors.success,
+  cannula:      colors.warning,
+  patient:      colors.warning,
+  movement:     colors.warning,
+  intervention: colors.warning,
+  experiment:   colors.primary,
+  device:       colors.danger,
+  other:        colors.subtext,
+};
+
 const fetchDeviceStatus = async () => ({
   spo2: 94,
   flow_lpm: 2.5,
@@ -15,12 +26,17 @@ const fetchDeviceStatus = async () => ({
   last_updated: new Date().toLocaleTimeString(),
 });
 
-export default function DashboardScreen({ navigation }) {
-  const [dims, setDims]             = useState(Dimensions.get('window'));
-  const isLandscape                 = dims.width > dims.height;
-  const [status, setStatus]         = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [chartWidth, setChartWidth] = useState(0);
+export default function DashboardScreen({ navigation, route }) {
+  const [dims, setDims]               = useState(Dimensions.get('window'));
+  const isLandscape                   = dims.width > dims.height;
+  const [status, setStatus]           = useState(null);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [chartWidth, setChartWidth]   = useState(0);
+  const [currentEvent, setCurrentEvent] = useState({
+    category: 'normal',
+    label: 'Normal',
+    timestamp: new Date().toISOString(),
+  });
 
   const load = async () => {
     const data = await fetchDeviceStatus();
@@ -34,6 +50,14 @@ export default function DashboardScreen({ navigation }) {
     return () => sub.remove();
   }, []);
 
+  // Receive new events navigated back from ReportEventScreen
+  useEffect(() => {
+    if (route.params?.newEvent) {
+      setCurrentEvent(route.params.newEvent);
+      navigation.setParams({ newEvent: undefined });
+    }
+  }, [route.params?.newEvent]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -45,12 +69,14 @@ export default function DashboardScreen({ navigation }) {
   }, [navigation]);
 
   const modeColor = status ? colors.badge[status.mode] ?? colors.primary : colors.subtext;
+  const statusColor = STATUS_COLORS[currentEvent.category] ?? colors.subtext;
+  const statusTime  = new Date(currentEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // ── Landscape: fullscreen chart only ─────────────────────────────────────
   if (isLandscape) {
     return (
       <SafeAreaView style={styles.safe}>
-        <Text style={styles.landscapeHint}>Tap the waveform to report an event</Text>
+        <Text style={styles.landscapeHint}>Touch and drag to select event time · drag to edges to scroll back in time</Text>
         <View
           style={styles.landscapeChart}
           onLayout={e => setChartWidth(e.nativeEvent.layout.width)}
@@ -70,11 +96,7 @@ export default function DashboardScreen({ navigation }) {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Image
-          source={require('../../assets/logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
         <Text style={styles.subtitle}>Device Status</Text>
 
         {status && (
@@ -83,6 +105,7 @@ export default function DashboardScreen({ navigation }) {
           </View>
         )}
 
+        {/* Vitals */}
         <View style={styles.row}>
           <MetricCard label="SpO₂"    value={status ? `${status.spo2}%`        : '—'} color={colors.success} />
           <MetricCard label="O₂ Flow" value={status ? `${status.flow_lpm} LPM` : '—'} color={colors.primary} />
@@ -96,7 +119,15 @@ export default function DashboardScreen({ navigation }) {
           <MetricCard label="Updated" value={status?.last_updated ?? '—'} color={colors.subtext} />
         </View>
 
-        <Text style={styles.sectionLabel}>Pleth — tap to report  ·  rotate for full view</Text>
+        {/* Current status */}
+        <View style={[styles.statusCard, { borderLeftColor: statusColor }]}>
+          <Text style={styles.statusCardLabel}>Current Status</Text>
+          <Text style={[styles.statusCardValue, { color: statusColor }]}>{currentEvent.label}</Text>
+          <Text style={styles.statusCardTime}>since {statusTime}</Text>
+        </View>
+
+        {/* Pleth chart */}
+        <Text style={styles.sectionLabel}>Pleth — drag to report · rotate for full view</Text>
         <View
           style={styles.chartContainer}
           onLayout={e => setChartWidth(e.nativeEvent.layout.width)}
@@ -106,6 +137,7 @@ export default function DashboardScreen({ navigation }) {
           )}
         </View>
 
+        {/* Fallback button */}
         <TouchableOpacity
           style={styles.reportButton}
           onPress={() => navigation.navigate('ReportEvent', {})}
@@ -138,8 +170,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     marginBottom: spacing.md,
   },
-  modeText:   { color: '#fff', fontWeight: '600', fontSize: 14 },
-  row:        { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  modeText:  { color: '#fff', fontWeight: '600', fontSize: 14 },
+  row:       { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   card: {
     flex: 1,
     backgroundColor: colors.card,
@@ -152,13 +184,28 @@ const styles = StyleSheet.create({
   },
   cardLabel: { fontSize: 12, color: colors.subtext, marginBottom: spacing.xs },
   cardValue: { fontSize: 22, fontWeight: '700' },
+  statusCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  statusCardLabel: { fontSize: 12, color: colors.subtext, marginBottom: spacing.xs },
+  statusCardValue: { fontSize: 20, fontWeight: '700' },
+  statusCardTime:  { fontSize: 12, color: colors.subtext, marginTop: 2 },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.subtext,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
   chartContainer: {
@@ -171,7 +218,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   reportButton: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
     backgroundColor: colors.card,
     borderRadius: 14,
     borderWidth: 1.5,
@@ -179,15 +226,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  reportButtonText:  { color: colors.primary, fontSize: 17, fontWeight: '600' },
+  reportButtonText: { color: colors.primary, fontSize: 17, fontWeight: '600' },
   landscapeHint: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.subtext,
     textAlign: 'center',
     paddingVertical: spacing.xs,
   },
-  landscapeChart: {
-    flex: 1,
-    backgroundColor: colors.card,
-  },
+  landscapeChart: { flex: 1, backgroundColor: colors.card },
 });

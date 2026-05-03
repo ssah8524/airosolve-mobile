@@ -8,13 +8,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, spacing } from '../theme';
 
 const CATEGORIES = [
-  { id: 'cannula',      label: 'Cannula Issue',      icon: '🔌' },
-  { id: 'patient',      label: 'Patient Issue',       icon: '🧑‍⚕️' },
-  { id: 'movement',     label: 'Patient Movement',    icon: '🚶' },
-  { id: 'intervention', label: 'Intervention / Drug', icon: '💊' },
-  { id: 'experiment',   label: 'Experiment Status',   icon: '🧪' },
-  { id: 'device',       label: 'Device Alert',        icon: '⚠️' },
-  { id: 'other',        label: 'Other',               icon: '📝' },
+  { id: 'normal',       label: 'Back to Normal',      icon: '✅' },
+  { id: 'cannula',      label: 'Cannula Issue',        icon: '🔌' },
+  { id: 'patient',      label: 'Patient Issue',        icon: '🧑‍⚕️' },
+  { id: 'movement',     label: 'Patient Movement',     icon: '🚶' },
+  { id: 'intervention', label: 'Intervention / Drug',  icon: '💊' },
+  { id: 'experiment',   label: 'Experiment Status',    icon: '🧪' },
+  { id: 'device',       label: 'Device Alert',         icon: '⚠️' },
+  { id: 'other',        label: 'Other',                icon: '📝' },
 ];
 
 const TIME_MODE = { NOW: 'now', CUSTOM: 'custom' };
@@ -65,8 +66,14 @@ export default function ReportEventScreen({ route, navigation }) {
     await new Promise(r => setTimeout(r, 500));
     setSubmitting(false);
 
+    const categoryLabel = CATEGORIES.find(c => c.id === selected)?.label ?? selected;
     Alert.alert('Event Logged', 'Your report has been recorded.', [
-      { text: 'OK', onPress: () => navigation.goBack() },
+      {
+        text: 'OK',
+        onPress: () => navigation.navigate('Dashboard', {
+          newEvent: { ...event, label: categoryLabel },
+        }),
+      },
     ]);
   };
 
