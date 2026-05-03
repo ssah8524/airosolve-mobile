@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, RefreshControl, Image, Dimensions,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PlethChart from '../components/PlethChart';
 import { colors, spacing } from '../theme';
@@ -27,8 +28,8 @@ const fetchDeviceStatus = async () => ({
 });
 
 export default function DashboardScreen({ navigation, route }) {
-  const [dims, setDims]               = useState(Dimensions.get('window'));
-  const isLandscape                   = dims.width > dims.height;
+  const [rootDims, setRootDims]       = useState(Dimensions.get('window'));
+  const isLandscape                   = rootDims.width > rootDims.height;
   const [status, setStatus]           = useState(null);
   const [refreshing, setRefreshing]   = useState(false);
   const [chartWidth, setChartWidth]   = useState(0);
@@ -45,10 +46,6 @@ export default function DashboardScreen({ navigation, route }) {
 
   useEffect(() => { load(); }, []);
 
-  useEffect(() => {
-    const sub = Dimensions.addEventListener('change', ({ window }) => setDims(window));
-    return () => sub.remove();
-  }, []);
 
   // Receive new events navigated back from ReportEventScreen
   useEffect(() => {
@@ -73,9 +70,13 @@ export default function DashboardScreen({ navigation, route }) {
   const statusTime  = new Date(currentEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // ── Landscape: fullscreen chart only ─────────────────────────────────────
+  const onRootLayout = useCallback((e) => {
+    setRootDims(e.nativeEvent.layout);
+  }, []);
+
   if (isLandscape) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} onLayout={onRootLayout}>
         <Text style={styles.landscapeHint}>Touch and drag to select event time · drag to edges to scroll back in time</Text>
         <View
           style={styles.landscapeChart}
@@ -91,7 +92,7 @@ export default function DashboardScreen({ navigation, route }) {
 
   // ── Portrait: full dashboard ──────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} onLayout={onRootLayout}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
