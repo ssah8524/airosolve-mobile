@@ -10,7 +10,7 @@ const POLL_MS    = 200;
 const MOCK_HZ    = 50;       // mock sample rate when device is offline
 
 // How far back (ms) the user can scroll from the live edge
-const MAX_SCROLL_MS  = BUFFER_MS - DISPLAY_MS;   // 20 000 ms
+const MAX_SCROLL_MS  = BUFFER_MS;   // full 30 s
 const EDGE_ZONE      = 0.15;
 const MAX_SCROLL_STEP = 500;   // ms per move event at max edge depth
 
