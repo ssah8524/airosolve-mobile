@@ -16,3 +16,9 @@ export async function postEvent(event) {
   const { data } = await client.post('/events', event);
   return data;
 }
+
+export async function fetchPleth(sinceMs = null) {
+  const params = sinceMs != null ? { since: sinceMs } : {};
+  const { data } = await client.get('/pleth', { params });
+  return data;  // { samples: [{ts, v}], server_time_ms }
+}

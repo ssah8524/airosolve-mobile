@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, PanResponder, useWindowDimensions } from 'react-native';
 import Svg, { Path, Line, Rect, Circle, Text as SvgText } from 'react-native-svg';
 import { colors } from '../theme';
+import { fetchPleth } from '../api';
 
 const BUFFER_SECONDS  = 30;
 const DISPLAY_SECONDS = 10;
@@ -9,9 +10,9 @@ const SAMPLE_RATE     = 50;
 const BUFFER_SIZE     = BUFFER_SECONDS  * SAMPLE_RATE;   // 1500
 const DISPLAY_SIZE    = DISPLAY_SECONDS * SAMPLE_RATE;   // 500
 const MAX_OFFSET      = BUFFER_SIZE - DISPLAY_SIZE;      // 1000
-const UPDATE_MS       = 40;
-const EDGE_ZONE       = 0.15;   // 15% of width triggers scrolling
-const MAX_SCROLL_STEP = 10;     // samples per move event at max edge depth
+const POLL_MS         = 200;   // how often we ask the Pi for new pleth samples
+const EDGE_ZONE       = 0.15;
+const MAX_SCROLL_STEP = 10;
 
 function mockSample(t) {
   const f = 72 / 60;
@@ -23,32 +24,35 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
   const { height: screenH } = useWindowDimensions();
   const H = landscape ? screenH - 40 : 160;
 
-  // Mutable refs — no re-render on change
-  const bufferRef         = useRef([]);
-  const tRef              = useRef(BUFFER_SIZE / SAMPLE_RATE);
-  const viewOffsetRef     = useRef(0);
-  const isDraggingRef     = useRef(false);
-  const widthRef          = useRef(width);
-  const HRef              = useRef(H);
-  const onChartPressRef   = useRef(onChartPress);
+  const bufferRef       = useRef([]);
+  const sinceRef        = useRef(null);   // last ts we received from the Pi (ms)
+  const mockTRef        = useRef(BUFFER_SIZE / SAMPLE_RATE);
+  const viewOffsetRef   = useRef(0);
+  const isDraggingRef   = useRef(false);
+  const widthRef        = useRef(width);
+  const HRef            = useRef(H);
+  const onChartPressRef = useRef(onChartPress);
+  const deviceOkRef     = useRef(false);  // true once we get real data
 
   useEffect(() => { widthRef.current      = width;        }, [width]);
   useEffect(() => { HRef.current          = H;            }, [H]);
   useEffect(() => { onChartPressRef.current = onChartPress; }, [onChartPress]);
 
-  const [displayed,   setDisplayed]   = useState([]);
-  const [viewOffset,  setViewOffset]  = useState(0);  // for LIVE indicator only
-  const [dragX,       setDragX]       = useState(null);
+  const [displayed,  setDisplayed]  = useState([]);
+  const [viewOffset, setViewOffset] = useState(0);
+  const [dragX,      setDragX]      = useState(null);
+  const [isLive,     setIsLive]     = useState(true);
 
   const refreshDisplay = useCallback(() => {
     const buf = bufferRef.current;
     const off = viewOffsetRef.current;
     const end = buf.length - off;
-    const start = Math.max(0, end - DISPLAY_SIZE);
-    setDisplayed(buf.slice(start, end));
+    setDisplayed(buf.slice(Math.max(0, end - DISPLAY_SIZE), end));
+    setIsLive(off === 0);
+    setViewOffset(off);
   }, []);
 
-  // Initialise buffer
+  // Seed buffer with mock data on first render
   useEffect(() => {
     const now = Date.now();
     for (let i = 0; i < BUFFER_SIZE; i++) {
@@ -60,18 +64,52 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
     refreshDisplay();
   }, [refreshDisplay]);
 
-  // Live data feed
+  // Poll Pi for real pleth data; fall back to mock when unreachable
   useEffect(() => {
-    const interval = setInterval(() => {
-      tRef.current += 1 / SAMPLE_RATE;
-      bufferRef.current.push({ ts: Date.now(), v: mockSample(tRef.current) });
-      if (bufferRef.current.length > BUFFER_SIZE) bufferRef.current.shift();
-      if (viewOffsetRef.current === 0) refreshDisplay();
-    }, UPDATE_MS);
-    return () => clearInterval(interval);
+    let active = true;
+
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const result = await fetchPleth(sinceRef.current);
+        if (!active) return;
+
+        const incoming = result.samples ?? [];
+        if (incoming.length > 0) {
+          deviceOkRef.current = true;
+          // Replace mock history once with device data on first successful fetch
+          if (sinceRef.current === null && incoming.length >= DISPLAY_SIZE) {
+            bufferRef.current = incoming.slice(-BUFFER_SIZE).map(s => ({ ts: s.ts, v: s.v }));
+          } else {
+            for (const s of incoming) {
+              bufferRef.current.push({ ts: s.ts, v: s.v });
+              if (bufferRef.current.length > BUFFER_SIZE) bufferRef.current.shift();
+            }
+          }
+          sinceRef.current = incoming[incoming.length - 1].ts;
+          if (viewOffsetRef.current === 0) refreshDisplay();
+        }
+      } catch {
+        // Device unreachable — advance mock data so chart keeps moving
+        if (!deviceOkRef.current) {
+          mockTRef.current += POLL_MS / 1000;
+          const steps = Math.round(POLL_MS / (1000 / SAMPLE_RATE));
+          const now = Date.now();
+          for (let i = 0; i < steps; i++) {
+            mockTRef.current += 1 / SAMPLE_RATE;
+            bufferRef.current.push({ ts: now - (steps - i) * (1000 / SAMPLE_RATE), v: mockSample(mockTRef.current) });
+            if (bufferRef.current.length > BUFFER_SIZE) bufferRef.current.shift();
+          }
+          if (viewOffsetRef.current === 0) refreshDisplay();
+        }
+      }
+    };
+
+    const interval = setInterval(poll, POLL_MS);
+    poll();  // immediate first call
+    return () => { active = false; clearInterval(interval); };
   }, [refreshDisplay]);
 
-  // PanResponder — created once, uses refs for all mutable values
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder:  () => true,
@@ -86,7 +124,6 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
       const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
       setDragX(x);
 
-      // Edge scrolling
       const edgeW = w * EDGE_ZONE;
       let newOff = viewOffsetRef.current;
       if (x < edgeW) {
@@ -99,19 +136,20 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
 
       if (newOff !== viewOffsetRef.current) {
         viewOffsetRef.current = newOff;
-        setViewOffset(newOff);
         const buf = bufferRef.current;
         const end = buf.length - newOff;
         setDisplayed(buf.slice(Math.max(0, end - DISPLAY_SIZE), end));
+        setIsLive(newOff === 0);
+        setViewOffset(newOff);
       }
     },
 
     onPanResponderRelease: (evt) => {
-      const w   = widthRef.current;
-      const x   = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
-      const buf = bufferRef.current;
-      const off = viewOffsetRef.current;
-      const end = buf.length - off;
+      const w    = widthRef.current;
+      const x    = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+      const buf  = bufferRef.current;
+      const off  = viewOffsetRef.current;
+      const end  = buf.length - off;
       const disp = buf.slice(Math.max(0, end - DISPLAY_SIZE), end);
 
       if (disp.length > 0) {
@@ -150,7 +188,6 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
     }).join(' ');
   }
 
-  // Timestamp label next to drag line
   let dragLabel = null;
   if (dragX !== null && displayed.length > 0) {
     const idx = Math.round((dragX / width) * (displayed.length - 1));
@@ -158,20 +195,15 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
     if (ts) dragLabel = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
-  const isLive = viewOffset === 0;
-
   return (
     <View {...panResponder.panHandlers} style={{ position: 'relative' }}>
       <Svg width={width} height={H}>
         <Rect x={0} y={0} width={width} height={H} fill={colors.card} rx={landscape ? 0 : 12} />
-        {/* Mid-line grid */}
         <Line
           x1={pad} y1={H / 2} x2={width - pad} y2={H / 2}
           stroke={colors.border} strokeWidth={1} strokeDasharray="4,4"
         />
-        {/* Waveform */}
         {pathD ? <Path d={pathD} stroke={colors.primary} strokeWidth={1.8} fill="none" /> : null}
-        {/* Drag indicator */}
         {dragX !== null && (
           <>
             <Line x1={dragX} y1={pad} x2={dragX} y2={H - pad} stroke={colors.danger} strokeWidth={2} />
@@ -191,10 +223,9 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
         )}
       </Svg>
 
-      {/* LIVE / history indicator */}
       <View style={{ position: 'absolute', top: 6, right: 10, pointerEvents: 'none' }}>
         <Text style={{ fontSize: 11, fontWeight: '700', color: isLive ? colors.success : colors.warning }}>
-          {isLive ? '● LIVE' : `◀ ${Math.round(viewOffset / SAMPLE_RATE)}s ago`}
+          {isLive ? (deviceOkRef.current ? '● LIVE' : '● DEMO') : `◀ ${Math.round(viewOffset / SAMPLE_RATE)}s ago`}
         </Text>
       </View>
     </View>

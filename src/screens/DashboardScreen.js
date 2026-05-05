@@ -49,7 +49,11 @@ export default function DashboardScreen({ navigation, route }) {
     setStatus(data);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
 
   // Receive new events navigated back from ReportEventScreen
