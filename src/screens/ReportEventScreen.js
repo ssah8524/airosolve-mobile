@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { postEvent } from '../api';
 import { colors, spacing } from '../theme';
 
 const CATEGORIES = [
@@ -59,10 +60,11 @@ export default function ReportEventScreen({ route, navigation }) {
       source: fromChart ? 'chart_tap' : 'manual',
     };
 
-    // TODO: POST to device API when backend is ready
-    console.log('Event reported:', event);
-
-    await new Promise(r => setTimeout(r, 500));
+    try {
+      await postEvent(event);
+    } catch {
+      Alert.alert('Warning', 'Event saved locally but could not reach the device.');
+    }
     setSubmitting(false);
 
     const categoryLabel = CATEGORIES.find(c => c.id === selected)?.label ?? selected;

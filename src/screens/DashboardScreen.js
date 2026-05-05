@@ -6,6 +6,7 @@ import {
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PlethChart from '../components/PlethChart';
+import { fetchStatus } from '../api';
 import { colors, spacing } from '../theme';
 
 const STATUS_COLORS = {
@@ -19,13 +20,17 @@ const STATUS_COLORS = {
   other:        colors.subtext,
 };
 
-const fetchDeviceStatus = async () => ({
-  spo2: 94,
-  flow_lpm: 2.5,
-  mode: 'IN_RANGE',
-  signal_quality: 'good',
-  last_updated: new Date().toLocaleTimeString(),
-});
+const fetchDeviceStatus = async () => {
+  try {
+    const data = await fetchStatus();
+    return {
+      ...data.vitals,
+      last_updated: new Date().toLocaleTimeString(),
+    };
+  } catch {
+    return null;  // device unreachable — show dashes
+  }
+};
 
 export default function DashboardScreen({ navigation, route }) {
   const [rootDims, setRootDims]       = useState(Dimensions.get('window'));
