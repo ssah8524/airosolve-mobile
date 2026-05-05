@@ -119,14 +119,7 @@ export default function DashboardScreen({ navigation, route }) {
         <View style={styles.row}>
           <MetricCard label="SpO₂"    value={status ? `${status.spo2}%`        : '—'} color={colors.success} />
           <MetricCard label="O₂ Flow" value={status ? `${status.flow_lpm} LPM` : '—'} color={colors.primary} />
-        </View>
-        <View style={styles.row}>
-          <MetricCard
-            label="Signal"
-            value={status ? status.signal_quality.toUpperCase() : '—'}
-            color={status?.signal_quality === 'good' ? colors.success : colors.danger}
-          />
-          <MetricCard label="Updated" value={status?.last_updated ?? '—'} color={colors.subtext} />
+          <MetricCard label="Updated" value={status?.last_updated ?? '—'}              color={colors.subtext} />
         </View>
 
         {/* Current status */}
