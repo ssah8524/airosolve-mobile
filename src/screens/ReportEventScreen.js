@@ -53,11 +53,14 @@ export default function ReportEventScreen({ route, navigation }) {
     }
     setSubmitting(true);
 
+    const categoryLabel = CATEGORIES.find(c => c.id === selected)?.label ?? selected;
+
     const event = {
       category: selected,
-      notes: notes.trim(),
+      label:    categoryLabel,
+      notes:    notes.trim(),
       timestamp: resolvedTime.toISOString(),
-      source: fromChart ? 'chart_tap' : 'manual',
+      source:   fromChart ? 'chart_tap' : 'manual',
     };
 
     try {
@@ -66,8 +69,6 @@ export default function ReportEventScreen({ route, navigation }) {
       Alert.alert('Warning', 'Event saved locally but could not reach the device.');
     }
     setSubmitting(false);
-
-    const categoryLabel = CATEGORIES.find(c => c.id === selected)?.label ?? selected;
     Alert.alert('Event Logged', 'Your report has been recorded.', [
       {
         text: 'OK',
