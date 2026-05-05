@@ -6,7 +6,7 @@ import {
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PlethChart from '../components/PlethChart';
-import { fetchStatus } from '../api';
+import { fetchStatus, postEvent } from '../api';
 import { colors, spacing } from '../theme';
 
 const STATUS_COLORS = {
@@ -140,11 +140,17 @@ export default function DashboardScreen({ navigation, route }) {
             {currentEvent.category !== 'normal' && (
               <TouchableOpacity
                 style={styles.resolveButton}
-                onPress={() => setCurrentEvent({
-                  category: 'normal',
-                  label: 'Normal',
-                  timestamp: new Date().toISOString(),
-                })}
+                onPress={async () => {
+                  const resolved = {
+                    category:  'normal',
+                    label:     'Normal',
+                    timestamp: new Date().toISOString(),
+                    source:    'app',
+                    notes:     '',
+                  };
+                  setCurrentEvent(resolved);
+                  try { await postEvent(resolved); } catch { /* best-effort */ }
+                }}
               >
                 <Text style={styles.resolveButtonText}>✓  Mark Resolved</Text>
               </TouchableOpacity>
