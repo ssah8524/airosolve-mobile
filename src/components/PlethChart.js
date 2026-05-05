@@ -4,15 +4,15 @@ import Svg, { Path, Line, Rect, Circle, Text as SvgText } from 'react-native-svg
 import { colors } from '../theme';
 import { fetchPleth } from '../api';
 
-const BUFFER_SECONDS  = 30;
-const DISPLAY_SECONDS = 10;
-const SAMPLE_RATE     = 50;
-const BUFFER_SIZE     = BUFFER_SECONDS  * SAMPLE_RATE;   // 1500
-const DISPLAY_SIZE    = DISPLAY_SECONDS * SAMPLE_RATE;   // 500
-const MAX_OFFSET      = BUFFER_SIZE - DISPLAY_SIZE;      // 1000
-const POLL_MS         = 200;   // how often we ask the Pi for new pleth samples
-const EDGE_ZONE       = 0.15;
-const MAX_SCROLL_STEP = 10;
+const BUFFER_MS  = 30_000;   // keep 30 s of history
+const DISPLAY_MS = 10_000;   // always render a 10 s window
+const POLL_MS    = 200;
+const MOCK_HZ    = 50;       // mock sample rate when device is offline
+
+// How far back (ms) the user can scroll from the live edge
+const MAX_SCROLL_MS  = BUFFER_MS - DISPLAY_MS;   // 20 000 ms
+const EDGE_ZONE      = 0.15;
+const MAX_SCROLL_STEP = 500;   // ms per move event at max edge depth
 
 function mockSample(t) {
   const f = 72 / 60;
@@ -24,92 +24,96 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
   const { height: screenH } = useWindowDimensions();
   const H = landscape ? screenH - 40 : 160;
 
-  const bufferRef       = useRef([]);
-  const sinceRef        = useRef(null);   // last ts we received from the Pi (ms)
-  const mockTRef        = useRef(BUFFER_SIZE / SAMPLE_RATE);
-  const viewOffsetRef   = useRef(0);
+  // All mutable values in refs — no re-renders on change
+  const bufferRef       = useRef([]);   // [{ts: epoch_ms, v: number}]
+  const sinceRef        = useRef(null); // last ts from Pi (ms)
+  const mockTRef        = useRef(BUFFER_MS / 1000);
+  const scrollMsRef     = useRef(0);    // ms offset from live edge (0 = live)
   const isDraggingRef   = useRef(false);
   const widthRef        = useRef(width);
   const HRef            = useRef(H);
   const onChartPressRef = useRef(onChartPress);
-  const deviceOkRef     = useRef(false);  // true once we get real data
+  const deviceOkRef     = useRef(false);
 
-  useEffect(() => { widthRef.current      = width;        }, [width]);
-  useEffect(() => { HRef.current          = H;            }, [H]);
+  useEffect(() => { widthRef.current       = width;        }, [width]);
+  useEffect(() => { HRef.current           = H;            }, [H]);
   useEffect(() => { onChartPressRef.current = onChartPress; }, [onChartPress]);
 
   const [displayed,  setDisplayed]  = useState([]);
-  const [viewOffset, setViewOffset] = useState(0);
+  const [scrollMs,   setScrollMs]   = useState(0);   // for indicator only
   const [dragX,      setDragX]      = useState(null);
   const [isLive,     setIsLive]     = useState(true);
 
+  // Slice the buffer to a 10 s window ending at (latestTs - scrollMs)
   const refreshDisplay = useCallback(() => {
     const buf = bufferRef.current;
-    const off = viewOffsetRef.current;
-    const end = buf.length - off;
-    setDisplayed(buf.slice(Math.max(0, end - DISPLAY_SIZE), end));
-    setIsLive(off === 0);
-    setViewOffset(off);
+    if (buf.length === 0) return;
+    const tEnd   = buf[buf.length - 1].ts - scrollMsRef.current;
+    const tStart = tEnd - DISPLAY_MS;
+    setDisplayed(buf.filter(s => s.ts >= tStart && s.ts <= tEnd));
+    setIsLive(scrollMsRef.current === 0);
+    setScrollMs(scrollMsRef.current);
   }, []);
 
-  // Seed buffer with mock data on first render
+  // Seed 30 s of mock data so the chart is never empty on first render
   useEffect(() => {
-    const now = Date.now();
-    for (let i = 0; i < BUFFER_SIZE; i++) {
+    const now  = Date.now();
+    const step = 1000 / MOCK_HZ;
+    const n    = Math.round(BUFFER_MS / step);
+    for (let i = 0; i < n; i++) {
       bufferRef.current.push({
-        ts: now - (BUFFER_SIZE - i) * (1000 / SAMPLE_RATE),
-        v:  mockSample(i / SAMPLE_RATE),
+        ts: now - (n - i) * step,
+        v:  mockSample(i / MOCK_HZ),
       });
     }
     refreshDisplay();
   }, [refreshDisplay]);
 
-  // Poll Pi for real pleth data; fall back to mock when unreachable
+  // Poll the Pi for real samples; fall back to advancing mock when unreachable
   useEffect(() => {
     let active = true;
-
     const poll = async () => {
       if (!active) return;
       try {
-        const result = await fetchPleth(sinceRef.current);
+        const result  = await fetchPleth(sinceRef.current);
         if (!active) return;
-
         const incoming = result.samples ?? [];
         if (incoming.length > 0) {
           deviceOkRef.current = true;
-          // Replace mock history once with device data on first successful fetch
-          if (sinceRef.current === null && incoming.length >= DISPLAY_SIZE) {
-            bufferRef.current = incoming.slice(-BUFFER_SIZE).map(s => ({ ts: s.ts, v: s.v }));
+          if (sinceRef.current === null) {
+            // First successful fetch — replace seed with real history
+            bufferRef.current = incoming.map(s => ({ ts: s.ts, v: s.v }));
           } else {
-            for (const s of incoming) {
-              bufferRef.current.push({ ts: s.ts, v: s.v });
-              if (bufferRef.current.length > BUFFER_SIZE) bufferRef.current.shift();
-            }
+            for (const s of incoming) bufferRef.current.push({ ts: s.ts, v: s.v });
           }
+          // Trim to 30 s of history
+          const cutoff = incoming[incoming.length - 1].ts - BUFFER_MS;
+          bufferRef.current = bufferRef.current.filter(s => s.ts >= cutoff);
           sinceRef.current = incoming[incoming.length - 1].ts;
-          if (viewOffsetRef.current === 0) refreshDisplay();
+          if (scrollMsRef.current === 0) refreshDisplay();
         }
       } catch {
-        // Device unreachable — advance mock data so chart keeps moving
+        // Device unreachable — keep mock moving so chart animates
         if (!deviceOkRef.current) {
-          mockTRef.current += POLL_MS / 1000;
-          const steps = Math.round(POLL_MS / (1000 / SAMPLE_RATE));
-          const now = Date.now();
-          for (let i = 0; i < steps; i++) {
-            mockTRef.current += 1 / SAMPLE_RATE;
-            bufferRef.current.push({ ts: now - (steps - i) * (1000 / SAMPLE_RATE), v: mockSample(mockTRef.current) });
-            if (bufferRef.current.length > BUFFER_SIZE) bufferRef.current.shift();
+          const now  = Date.now();
+          const step = 1000 / MOCK_HZ;
+          const n    = Math.round(POLL_MS / step);
+          for (let i = 0; i < n; i++) {
+            mockTRef.current += 1 / MOCK_HZ;
+            bufferRef.current.push({ ts: now - (n - i) * step, v: mockSample(mockTRef.current) });
           }
-          if (viewOffsetRef.current === 0) refreshDisplay();
+          const cutoff = now - BUFFER_MS;
+          bufferRef.current = bufferRef.current.filter(s => s.ts >= cutoff);
+          if (scrollMsRef.current === 0) refreshDisplay();
         }
       }
     };
-
-    const interval = setInterval(poll, POLL_MS);
-    poll();  // immediate first call
-    return () => { active = false; clearInterval(interval); };
+    const id = setInterval(poll, POLL_MS);
+    poll();
+    return () => { active = false; clearInterval(id); };
   }, [refreshDisplay]);
 
+  // PanResponder — all mutable state via refs
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder:  () => true,
@@ -125,45 +129,42 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
       setDragX(x);
 
       const edgeW = w * EDGE_ZONE;
-      let newOff = viewOffsetRef.current;
+      let newScroll = scrollMsRef.current;
       if (x < edgeW) {
         const depth = 1 - x / edgeW;
-        newOff = Math.min(newOff + Math.ceil(depth * MAX_SCROLL_STEP), MAX_OFFSET);
+        newScroll = Math.min(newScroll + Math.ceil(depth * MAX_SCROLL_STEP), MAX_SCROLL_MS);
       } else if (x > w - edgeW) {
         const depth = (x - (w - edgeW)) / edgeW;
-        newOff = Math.max(newOff - Math.ceil(depth * MAX_SCROLL_STEP), 0);
+        newScroll = Math.max(newScroll - Math.ceil(depth * MAX_SCROLL_STEP), 0);
       }
 
-      if (newOff !== viewOffsetRef.current) {
-        viewOffsetRef.current = newOff;
-        const buf = bufferRef.current;
-        const end = buf.length - newOff;
-        setDisplayed(buf.slice(Math.max(0, end - DISPLAY_SIZE), end));
-        setIsLive(newOff === 0);
-        setViewOffset(newOff);
+      if (newScroll !== scrollMsRef.current) {
+        scrollMsRef.current = newScroll;
+        const buf    = bufferRef.current;
+        if (buf.length === 0) return;
+        const tEnd   = buf[buf.length - 1].ts - newScroll;
+        const tStart = tEnd - DISPLAY_MS;
+        setDisplayed(buf.filter(s => s.ts >= tStart && s.ts <= tEnd));
+        setIsLive(newScroll === 0);
+        setScrollMs(newScroll);
       }
     },
 
     onPanResponderRelease: (evt) => {
-      const w    = widthRef.current;
-      const x    = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
-      const buf  = bufferRef.current;
-      const off  = viewOffsetRef.current;
-      const end  = buf.length - off;
-      const disp = buf.slice(Math.max(0, end - DISPLAY_SIZE), end);
+      const w   = widthRef.current;
+      const x   = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+      const buf = bufferRef.current;
+      if (buf.length === 0) { isDraggingRef.current = false; setDragX(null); return; }
 
-      if (disp.length > 0) {
-        const idx = Math.round((x / w) * (disp.length - 1));
-        const tappedTime = new Date(disp[Math.min(idx, disp.length - 1)].ts);
-        setTimeout(() => {
-          isDraggingRef.current = false;
-          setDragX(null);
-          onChartPressRef.current?.(tappedTime);
-        }, 300);
-      } else {
+      const tEnd   = buf[buf.length - 1].ts - scrollMsRef.current;
+      const tStart = tEnd - DISPLAY_MS;
+      const tapped = new Date(tStart + (x / w) * DISPLAY_MS);
+
+      setTimeout(() => {
         isDraggingRef.current = false;
         setDragX(null);
-      }
+        onChartPressRef.current?.(tapped);
+      }, 300);
     },
 
     onPanResponderTerminate: () => {
@@ -172,27 +173,34 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
     },
   })).current;
 
-  // ── SVG rendering ────────────────────────────────────────────────────────
+  // ── SVG rendering — always maps 10 s to the full chart width ─────────────
   const pad = 8;
   const w   = width - pad * 2;
 
-  let pathD = '';
+  let pathD   = '';
+  let tStart  = 0;
+  let tEnd    = 0;
+
   if (displayed.length > 1) {
-    const vals = displayed.map(s => s.v);
-    const minV = Math.min(...vals);
+    tEnd   = displayed[displayed.length - 1].ts;
+    tStart = tEnd - DISPLAY_MS;
+
+    const vals  = displayed.map(s => s.v);
+    const minV  = Math.min(...vals);
     const range = (Math.max(...vals) - minV) || 1;
-    pathD = displayed.map((s, i) => {
-      const x = pad + (i / (displayed.length - 1)) * w;
+
+    pathD = displayed.map(s => {
+      const x = pad + ((s.ts - tStart) / DISPLAY_MS) * w;
       const y = pad + (1 - (s.v - minV) / range) * (H - pad * 2);
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      return `${s === displayed[0] ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
   }
 
+  // Drag-line label: derive time from pixel position
   let dragLabel = null;
-  if (dragX !== null && displayed.length > 0) {
-    const idx = Math.round((dragX / width) * (displayed.length - 1));
-    const ts  = displayed[Math.min(idx, displayed.length - 1)]?.ts;
-    if (ts) dragLabel = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (dragX !== null && displayed.length > 1) {
+    const ts = tStart + (dragX / width) * DISPLAY_MS;
+    dragLabel = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
   return (
@@ -225,7 +233,9 @@ export default function PlethChart({ onChartPress, width, landscape = false }) {
 
       <View style={{ position: 'absolute', top: 6, right: 10, pointerEvents: 'none' }}>
         <Text style={{ fontSize: 11, fontWeight: '700', color: isLive ? colors.success : colors.warning }}>
-          {isLive ? (deviceOkRef.current ? '● LIVE' : '● DEMO') : `◀ ${Math.round(viewOffset / SAMPLE_RATE)}s ago`}
+          {isLive
+            ? (deviceOkRef.current ? '● LIVE' : '● DEMO')
+            : `◀ ${Math.round(scrollMs / 1000)}s ago`}
         </Text>
       </View>
     </View>
