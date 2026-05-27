@@ -44,6 +44,9 @@ export default {
     // PKCS12_PASSWORD will be in the bundle, which is acceptable for
     // a sideloaded clinical-trial build (not a public App Store release).
     extra: {
+      eas: {
+        projectId: '3c2d875a-abae-488a-bbe7-686c34698355',
+      },
       tlsEnabled: process.env.TLS_ENABLED !== 'false',
       pkcs12Password: process.env.PKCS12_PASSWORD ?? '',
       piCaFingerprint: process.env.PI_CA_FINGERPRINT ?? '',
