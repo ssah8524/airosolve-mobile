@@ -33,6 +33,11 @@ yarn-error.*
 # local env files
 .env*.local
 
+# mTLS certificate assets — never commit cert material
+# Add client.p12 and ca.crt to assets/certs/ locally before building.
+# In CI, restore them from EAS Secrets / secure storage before the build step.
+assets/certs/
+
 # typescript
 *.tsbuildinfo
 
