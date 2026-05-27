@@ -27,6 +27,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.airosolve.mobile',
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
     },
     android: {
       adaptiveIcon: {
