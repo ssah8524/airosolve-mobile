@@ -24,6 +24,12 @@ export default {
       resizeMode: 'contain',
       backgroundColor: '#ffffff',
     },
+    updates: {
+      url: 'https://u.expo.dev/3c2d875a-abae-488a-bbe7-686c34698355',
+    },
+    runtimeVersion: {
+      policy: 'appVersion',
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.airosolve.mobile',
