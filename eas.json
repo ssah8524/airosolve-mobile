@@ -17,6 +17,13 @@
         "TLS_ENABLED": "false"
       }
     },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "TLS_ENABLED": "true"
+      }
+    },
     "production": {
       "distribution": "internal",
       "env": {
