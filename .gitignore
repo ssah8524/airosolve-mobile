@@ -33,10 +33,12 @@ yarn-error.*
 # local env files
 .env*.local
 
-# mTLS certificate assets — never commit cert material
-# Add client.p12 and ca.crt to assets/certs/ locally before building.
-# In CI, restore them from EAS Secrets / secure storage before the build step.
-assets/certs/
+# mTLS certificate assets
+# ca.crt is the CA public certificate — safe to commit and required for server
+# cert pinning in EAS builds (EAS strips gitignored files from the upload).
+# Private key material (*.key, *.p12) remains excluded above.
+assets/certs/*.key
+assets/certs/*.p12
 
 # typescript
 *.tsbuildinfo
