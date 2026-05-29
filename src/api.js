@@ -13,9 +13,8 @@
  * not work. Run `eas build --profile development` to generate a build, or
  * use `npx expo run:ios` / `npx expo run:android` for a local native build.
  */
-import { fetch as tlsFetch } from 'react-native-ssl-pinning';
 import { auth } from './firebase';
-import { getTlsOptions, isTlsEnabled } from './tls';
+import { isTlsEnabled } from './tls';
 
 const BASE_URL = 'https://airosolve.local:8080';
 const TIMEOUT_MS = 5000;
@@ -49,37 +48,25 @@ async function request(path, { method = 'GET', body, params } = {}) {
     ...(await authHeader()),
   };
 
-  const tlsOptions = getTlsOptions();
-
-  if (isTlsEnabled && tlsOptions) {
-    // react-native-ssl-pinning fetch — presents client cert + pins server cert.
-    // Its response object has .status (number), .bodyString (string), and
-    // .json() but NOT the standard Fetch .ok / .text() properties.
-    const response = await tlsFetch(url, {
-      method,
-      timeoutInterval: TIMEOUT_MS,
-      headers,
-      body: body != null ? JSON.stringify(body) : undefined,
-      ...tlsOptions,
-    });
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`API ${method} ${path} failed: ${response.status} ${response.bodyString ?? ''}`);
-    }
-    return typeof response.json === 'function'
-      ? response.json()
-      : JSON.parse(response.bodyString);
-  } else {
-    // Plain fetch for local dev (TLS_ENABLED=false).
+  // Standard fetch — works over both HTTP (dev) and HTTPS (production).
+  // For HTTPS, iOS uses the system trust store; the Pi's CA cert must be
+  // installed on the device as a trusted root profile (one-time setup).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
     const response = await fetch(url, {
       method,
       headers,
       body: body != null ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
     if (!response.ok) {
       const text = await response.text().catch(() => '');
       throw new Error(`API ${method} ${path} failed: ${response.status} ${text}`);
     }
     return response.json();
+  } finally {
+    clearTimeout(timer);
   }
 }
 
