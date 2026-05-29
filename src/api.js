@@ -51,31 +51,36 @@ async function request(path, { method = 'GET', body, params } = {}) {
 
   const tlsOptions = getTlsOptions();
 
-  let response;
   if (isTlsEnabled && tlsOptions) {
     // react-native-ssl-pinning fetch — presents client cert + pins server cert.
-    response = await tlsFetch(url, {
+    // Its response object has .status (number), .bodyString (string), and
+    // .json() but NOT the standard Fetch .ok / .text() properties.
+    const response = await tlsFetch(url, {
       method,
       timeoutInterval: TIMEOUT_MS,
       headers,
       body: body != null ? JSON.stringify(body) : undefined,
       ...tlsOptions,
     });
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`API ${method} ${path} failed: ${response.status} ${response.bodyString ?? ''}`);
+    }
+    return typeof response.json === 'function'
+      ? response.json()
+      : JSON.parse(response.bodyString);
   } else {
     // Plain fetch for local dev (TLS_ENABLED=false).
-    response = await fetch(url, {
+    const response = await fetch(url, {
       method,
       headers,
       body: body != null ? JSON.stringify(body) : undefined,
     });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`API ${method} ${path} failed: ${response.status} ${text}`);
+    }
+    return response.json();
   }
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`API ${method} ${path} failed: ${response.status} ${text}`);
-  }
-
-  return response.json();
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
