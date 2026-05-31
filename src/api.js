@@ -16,7 +16,11 @@
 import { auth } from './firebase';
 import { isTlsEnabled } from './tls';
 
-const BASE_URL = 'https://airosolve.local:8080';
+// Production / physical device: HTTPS to the Pi via mDNS hostname.
+// Local dev / simulator: plain HTTP to localhost (TLS_ENABLED=false).
+const BASE_URL = isTlsEnabled
+  ? 'https://airosolve.local:8080'
+  : 'http://localhost:8080';
 const TIMEOUT_MS = 5000;
 
 // ─── Auth header ─────────────────────────────────────────────────────────────

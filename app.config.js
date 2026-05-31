@@ -35,6 +35,15 @@ export default {
       bundleIdentifier: 'com.airosolve.mobile',
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        // Allow plain HTTP to localhost so the simulator can reach
+        // AiroSolve running on the same Mac without a TLS certificate.
+        NSAppTransportSecurity: {
+          NSExceptionDomains: {
+            localhost: {
+              NSExceptionAllowsInsecureHTTPLoads: true,
+            },
+          },
+        },
       },
     },
     android: {
@@ -65,6 +74,8 @@ export default {
       eas: {
         projectId: '3c2d875a-abae-488a-bbe7-686c34698355',
       },
+      // TLS is on by default (secure). Override in .env.local with
+      // TLS_ENABLED=false for simulator dev — that file is gitignored.
       tlsEnabled: process.env.TLS_ENABLED !== 'false',
       pkcs12Password: process.env.PKCS12_PASSWORD ?? '',
       piCaFingerprint: process.env.PI_CA_FINGERPRINT ?? '',
