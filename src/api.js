@@ -83,3 +83,13 @@ export async function postEvent(event) {
 export async function fetchPleth(sinceMs = null) {
   return request('/pleth', { params: sinceMs != null ? { since: sinceMs } : {} });
 }
+
+/**
+ * Register an Expo push token with the Pi so quality-drop alerts can be
+ * delivered to this device.
+ *
+ * @param {string} token  — Expo push token obtained from `getExpoPushTokenAsync`
+ */
+export async function postDeviceToken(token) {
+  return request('/device-token', { method: 'POST', body: { token } });
+}

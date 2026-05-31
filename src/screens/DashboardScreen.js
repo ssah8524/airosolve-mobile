@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Alert,
   ScrollView, RefreshControl, Image, Dimensions,
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 import PlethChart from '../components/PlethChart';
-import { fetchStatus, postEvent } from '../api';
+import { fetchStatus, postEvent, postDeviceToken } from '../api';
+import { initNotifications, useForegroundAlerts } from '../notifications';
 import { colors, spacing } from '../theme';
 
 const STATUS_COLORS = {
@@ -55,6 +57,38 @@ export default function DashboardScreen({ navigation, route }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Register this device for push notifications once on mount.
+  useEffect(() => {
+    initNotifications(postDeviceToken);
+  }, []);
+
+  // Handle foreground quality-drop notifications with a "Report Event" action.
+  useEffect(() => {
+    const handleFallback = useForegroundAlerts();
+    const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      const { data } = notification.request.content;
+      if (data?.type === 'quality_drop') {
+        Alert.alert(
+          'Signal Quality Drop',
+          `Pleth signal quality has degraded (${data.quality}). Please check the probe.`,
+          [
+            { text: 'Dismiss' },
+            {
+              text: 'Report Event',
+              onPress: () =>
+                navigation.navigate('ReportEvent', {
+                  timestamp: new Date().toISOString(),
+                  fromAlert: true,
+                }),
+            },
+          ],
+        );
+      } else {
+        handleFallback(notification);
+      }
+    });
+    return () => subscription.remove();
+  }, [navigation]);
 
   // Receive new events navigated back from ReportEventScreen
   useEffect(() => {

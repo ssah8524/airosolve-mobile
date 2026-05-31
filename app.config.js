@@ -48,6 +48,15 @@ export default {
     web: {
       favicon: './assets/favicon.png',
     },
+    plugins: [
+      [
+        'expo-notifications',
+        {
+          androidMode:           'default',
+          androidCollapsedTitle: 'AiroSolve Alert',
+        },
+      ],
+    ],
     // Values exposed to the app at runtime via expo-constants.
     // NEVER put secrets here that you don't want in the JS bundle —
     // PKCS12_PASSWORD will be in the bundle, which is acceptable for
